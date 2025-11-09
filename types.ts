@@ -23,4 +23,5 @@ export interface CallLog {
   startTime: number;
   endTime: number | null;
   transcript: TranscriptEntry[];
+  audioRecordingUrl?: string;
 }

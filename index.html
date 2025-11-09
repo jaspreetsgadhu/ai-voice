@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,6 +11,10 @@
         font-family: 'Inter', sans-serif;
       }
     </style>
+<!-- This script is generated during the Netlify build and contains the API key -->
+<script src="/env-config.js"></script>
+<!-- Babel is used to transpile TSX code directly in the browser -->
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -25,6 +28,6 @@
 </head>
 <body class="bg-gray-900 text-gray-100">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="text/babel" data-presets="react,typescript" src="/index.tsx"></script>
 </body>
 </html>

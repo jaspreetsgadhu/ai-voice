@@ -87,9 +87,21 @@ const CallLogs: React.FC<CallLogsProps> = ({ logs }) => {
                     <td className="px-6 py-4 font-medium text-white">{log.agentName}</td>
                     <td className="px-6 py-4">{log.customerNumber}</td>
                     <td className="px-6 py-4">{calculateDuration(log.startTime, log.endTime)}</td>
-                    <td className="px-6 py-4 space-x-2">
+                    <td className="px-6 py-4 space-x-2 whitespace-nowrap">
                       <button onClick={() => setSelectedLog(log)} className="font-medium text-cyan-400 hover:underline">View Transcript</button>
-                      <button disabled className="font-medium text-gray-500 cursor-not-allowed">Play (Mock)</button>
+                      {log.audioRecordingUrl ? (
+                        <button 
+                            onClick={() => {
+                                const audio = new Audio(log.audioRecordingUrl);
+                                audio.play().catch(e => console.error("Error playing audio:", e));
+                            }}
+                            className="font-medium text-green-400 hover:underline"
+                        >
+                            Play Recording
+                        </button>
+                      ) : (
+                        <span className="font-medium text-gray-500 cursor-not-allowed">No Recording</span>
+                      )}
                     </td>
                   </tr>
                 ))

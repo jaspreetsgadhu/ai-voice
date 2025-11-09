@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Modality, LiveSession, LiveServerMessage, Blob } from "@google/genai";
+import { GoogleGenAI, Modality, LiveSession, LiveServerMessage } from "@google/genai";
 import Dashboard from './components/Dashboard';
 import AgentBuilder from './components/AgentBuilder';
 import CallManager from './components/CallManager';
@@ -10,6 +10,13 @@ import { DashboardIcon, AgentBuilderIcon, PhoneIcon, HistoryIcon, BotIcon, Micro
 import type { Agent, CallLog, TranscriptEntry } from './types';
 
 type Tab = 'dashboard' | 'builder' | 'manager' | 'simulation' | 'logs' | 'live';
+
+// The Blob type expected by the Gemini API
+interface GenAIBlob {
+    data: string;
+    mimeType: string;
+}
+
 
 // Audio utility functions from the Gemini documentation
 function decode(base64: string) {
@@ -50,7 +57,7 @@ function encode(bytes: Uint8Array) {
     return btoa(binary);
 }
 
-function createBlob(data: Float32Array): Blob {
+function createBlob(data: Float32Array): GenAIBlob {
     const l = data.length;
     const int16 = new Int16Array(l);
     for (let i = 0; i < l; i++) {
@@ -68,12 +75,18 @@ const App: React.FC = () => {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [callLogs, setCallLogs] = useState<CallLog[]>([]);
     const [currentCall, setCurrentCall] = useState<CallLog | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+
+    // Refs for call recording
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const mediaStreamRef = useRef<MediaStream | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
 
     // State for Live Conversation
     const [isLiveSessionActive, setIsLiveSessionActive] = useState(false);
     const [liveStatus, setLiveStatus] = useState('Disconnected');
     const [liveTranscript, setLiveTranscript] = useState<{userInput: string, agentResponse: string}[]>([]);
-    const [currentLiveTranscription, setCurrentLiveTranscription] = useState<{userInput: string, agentResponse: string}>({ userInput: '', agentResponse: '' });
+    const [currentLiveTranscription, setCurrentLiveTranscription] = useState<{ userInput: string, agentResponse: string}>({ userInput: '', agentResponse: '' });
 
     const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
     const microphoneStreamRef = useRef<MediaStream | null>(null);
@@ -124,9 +137,36 @@ const App: React.FC = () => {
         });
     };
     
-    const handleStartCall = (agentId: string, customerNumber: string) => {
+    const handleStartCall = async (agentId: string, customerNumber: string) => {
         const agent = agents.find(a => a.id === agentId);
         if (!agent) return;
+
+        setIsRecording(false);
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaStreamRef.current = stream;
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            
+            mediaRecorderRef.current = recorder;
+            audioChunksRef.current = [];
+
+            recorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            recorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("Microphone access denied:", err);
+            alert("Microphone access is required for call recording. The call will proceed without recording.");
+        }
+
 
         const newCall: CallLog = {
             id: Date.now().toString(),
@@ -147,12 +187,46 @@ const App: React.FC = () => {
 
     const handleHangUp = () => {
         if (currentCall) {
-            const finishedCall = { ...currentCall, endTime: Date.now() };
-            setCallLogs(prev => [...prev, finishedCall]);
-            setCurrentCall(null);
-            setActiveTab('logs');
+            const endCall = (audioUrl?: string) => {
+                const finishedCall = { 
+                    ...currentCall, 
+                    endTime: Date.now(),
+                    audioRecordingUrl: audioUrl,
+                };
+                setCallLogs(prev => [...prev, finishedCall]);
+                setCurrentCall(null);
+                setActiveTab('logs');
+
+                // Cleanup refs and state
+                mediaStreamRef.current?.getTracks().forEach(track => track.stop());
+                mediaRecorderRef.current = null;
+                mediaStreamRef.current = null;
+                audioChunksRef.current = [];
+                setIsRecording(false);
+            };
+
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.onstop = () => {
+                    if (audioChunksRef.current.length === 0) {
+                        endCall();
+                        return;
+                    }
+                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64Url = reader.result as string;
+                        endCall(base64Url);
+                    };
+                    reader.readAsDataURL(audioBlob);
+                };
+                mediaRecorderRef.current.stop();
+            } else {
+                // Call had no active recording
+                endCall();
+            }
         }
     };
+
 
     // Live Session Handlers
     const handleStartLiveSession = async (agentId: string) => {
@@ -268,7 +342,7 @@ const App: React.FC = () => {
                 setActiveTab('manager');
                 return <p>Error: Agent not found for current call.</p>;
             }
-            return <CallSimulation agent={agent} callLog={currentCall} onUpdateTranscript={handleUpdateTranscript} onHangUp={handleHangUp} />;
+            return <CallSimulation agent={agent} callLog={currentCall} onUpdateTranscript={handleUpdateTranscript} onHangUp={handleHangUp} isRecording={isRecording} />;
         }
         
         switch (activeTab) {

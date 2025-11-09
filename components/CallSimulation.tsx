@@ -9,9 +9,10 @@ interface CallSimulationProps {
   callLog: CallLog;
   onUpdateTranscript: (newTranscript: TranscriptEntry[]) => void;
   onHangUp: () => void;
+  isRecording: boolean;
 }
 
-const CallSimulation: React.FC<CallSimulationProps> = ({ agent, callLog, onUpdateTranscript, onHangUp }) => {
+const CallSimulation: React.FC<CallSimulationProps> = ({ agent, callLog, onUpdateTranscript, onHangUp, isRecording }) => {
   const [userInput, setUserInput] = useState('');
   const [isAgentTyping, setIsAgentTyping] = useState(false);
   const dialogueEndRef = useRef<HTMLDivElement>(null);
@@ -19,6 +20,23 @@ const CallSimulation: React.FC<CallSimulationProps> = ({ agent, callLog, onUpdat
   useEffect(() => {
     dialogueEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [callLog.transcript, isAgentTyping]);
+
+  // Effect to speak agent's messages using TTS
+  useEffect(() => {
+    const lastEntry = callLog.transcript[callLog.transcript.length - 1];
+    if (lastEntry && lastEntry.role === 'agent') {
+        window.speechSynthesis.cancel(); // Cancel any previous utterance
+        const utterance = new SpeechSynthesisUtterance(lastEntry.text);
+        window.speechSynthesis.speak(utterance);
+    }
+  }, [callLog.transcript]);
+
+  // Cleanup TTS on component unmount
+  useEffect(() => {
+    return () => {
+        window.speechSynthesis.cancel();
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,12 +64,23 @@ const CallSimulation: React.FC<CallSimulationProps> = ({ agent, callLog, onUpdat
           <h2 className="text-lg font-bold text-cyan-400">Live Call with {agent.name}</h2>
           <p className="text-sm text-gray-400">Connected to {callLog.customerNumber}</p>
         </div>
-        <button
-          onClick={onHangUp}
-          className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-        >
-          Hang Up
-        </button>
+        <div className="flex items-center space-x-4">
+            {isRecording && (
+                <div className="flex items-center space-x-2 text-red-400">
+                    <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    <span className="text-sm font-medium hidden sm:block">Recording</span>
+                </div>
+            )}
+            <button
+              onClick={onHangUp}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            >
+              Hang Up
+            </button>
+        </div>
       </div>
 
       <div className="flex-grow bg-gray-900 overflow-y-auto p-4 space-y-4">
