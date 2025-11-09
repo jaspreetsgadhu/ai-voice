@@ -1,0 +1,7 @@
+{
+  "name": "Think Mirai - AI Voice Calling Platform",
+  "description": "A responsive web application that simulates an AI Voice Calling platform. It features an Agent Development Environment for designing AI logic and a Call Manager for simulating inbound/outbound calls, using the Gemini API for agent logic and transcription.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
